@@ -15,9 +15,8 @@ unsigned int obstacleDistance;
 #define SPEED 200
 
 #define PUSH_BTN_PIN A3
-#define DEBOUNCE_DELAY 100
+#define DEBOUNCE_DELAY 200
 long lastTime = 0;
-int PUSH_BTN_LAST_STATE = LOW;
 int POWER_ON_STATE = LOW;
 
 enum ACTION {
@@ -76,7 +75,6 @@ void rotate() {
 }
 
 void runPingSensor() {
-  delay(50); //delay for ping sensor, min delay for ping sensor is 29ms
   //Serial.println("run ping sensor");
   obstacleDistance = sonar.ping_in();
   //Serial.println(obstacleDistance);
@@ -98,8 +96,6 @@ void runBot() {
     //digitalWrite(LED_PIN, HIGH);
     rotate();
   }
-  
-  delay(1000);
 }
 
 void stopBot() {
@@ -122,33 +118,30 @@ void setup() {
 }
 
 void loop() {
+  delay(100); //delay for ping sensor, min delay for ping sensor is 29ms
+  
   int pushBtnState = digitalRead(PUSH_BTN_PIN);
-  int currentTime = millis();
+  long currentTime = millis();
   
   if(currentTime - lastTime > DEBOUNCE_DELAY) {
-    if(pushBtnState == HIGH && PUSH_BTN_LAST_STATE == LOW) {
+    //switch on at transition from LOW -> HIGH
+    if(pushBtnState == HIGH) {
       if(POWER_ON_STATE == LOW) {
         POWER_ON_STATE = HIGH;
-        
-        //start bot
-        digitalWrite(LED_PIN, HIGH);
       } else {
         POWER_ON_STATE = LOW;
         
-        //stop bot
         digitalWrite(LED_PIN, LOW);
-
         stopPingSensor();
         stopBot();
       }
-
-      lastTime = currentTime;
     }
 
-    PUSH_BTN_LAST_STATE = pushBtnState;
+    lastTime = currentTime;
   }
 
   if(POWER_ON_STATE == HIGH) {
+    digitalWrite(LED_PIN, HIGH);
     runPingSensor();
     runBot();
   }
