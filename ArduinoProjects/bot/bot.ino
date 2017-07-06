@@ -43,10 +43,6 @@ AF_DCMotor leftWheel(DC_MOTOR_1, MOTOR34_64KHZ);
 AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
 ACTION botAction;
 
-void debug(char s[]) {
-  Serial.println(s);
-}
-
 void moveBackward() {
   leftWheel.run(FORWARD);
   rightWheel.run(FORWARD);
@@ -95,7 +91,7 @@ void rotate() {
 
 void runPingSensor() {
   obstacleDistance = sonar.ping_in();
-  debug(obstacleDistance);
+  //Serial.println(obstacleDistance);
 }
 
 void stopPingSensor() {
