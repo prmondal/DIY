@@ -1,32 +1,51 @@
+/******************************************************************
+ Project     : Obstacle Avoidance Robot
+ Libraries   : Ping sensor, Adafruit motor shield
+ Author      : Prasenjit Mondal
+ Date        : 06/07/17
+******************************************************************/
+
 #include <NewPing.h>
 #include <AFMotor.h>
 
 #define TRIGGER_PIN  A5  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     A4  // Arduino pin tied to echo pin on the ultrasonic sensor.
 #define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
+#define OBSTACLE_DETECT_DISTANCE 5
 
 #define LED_PIN A2
-
-#define OBSTACLE_DETECT_DISTANCE 5
-unsigned int obstacleDistance;
 
 #define DC_MOTOR_1 4
 #define DC_MOTOR_2 3
 #define SPEED 200
 
 #define PUSH_BTN_PIN A3
-#define DEBOUNCE_DELAY 200
-long lastTime = 0;
-int POWER_ON_STATE = LOW;
 
 enum ACTION {
   LEFT_ROTATION, RIGHT_ROTATION, MOVE_FORWARD, MOVE_BACKWARD
 };
 
+unsigned int obstacleDistance;
+
+unsigned long pingSensorDelay = 100; //ms
+unsigned long pingSensorLastEpoch = 0;
+
+unsigned long ledBlinkDelay = 100; //ms
+unsigned long ledBlinkLastEpoch = 0;
+int ledBlinkState = LOW;
+
+unsigned long DEBOUNCE_DELAY = 200;
+unsigned long pushBtnLastEpoch = 0;
+int POWER_ON_STATE = LOW;
+
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 AF_DCMotor leftWheel(DC_MOTOR_1, MOTOR34_64KHZ);
 AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
 ACTION botAction;
+
+void debug(char s[]) {
+  Serial.println(s);
+}
 
 void moveBackward() {
   leftWheel.run(FORWARD);
@@ -49,7 +68,7 @@ void rotateRight() {
 }
 
 void rotate() {
-  //check last rotation status and keep continue doing that
+  //check last rotation status and continue rotation
   if(botAction == LEFT_ROTATION) {
     rotateLeft();
     return;
@@ -61,7 +80,7 @@ void rotate() {
   }
   
   //rotate left or right (randomly) to avoid obstacle
-  int rand = random(1,3);
+  int rand = random(1, 3);
 
   //rand=1 -> rotate left
   //rand=2 -> rotate right
@@ -75,33 +94,50 @@ void rotate() {
 }
 
 void runPingSensor() {
-  //Serial.println("run ping sensor");
   obstacleDistance = sonar.ping_in();
-  //Serial.println(obstacleDistance);
+  debug(obstacleDistance);
 }
 
 void stopPingSensor() {
-  //Serial.println("stop ping sensor");
   sonar.timer_stop(); 
 }
 
-void runBot() {
-  //Serial.println("run bot");
-  //if obstacle not detected (if ping sensor is not connected value is measured 0 which allows to move the bot forward)
-  if(obstacleDistance > OBSTACLE_DETECT_DISTANCE) {
-    //digitalWrite(LED_PIN, LOW);
+void runBot(unsigned long currentTime) {
+  //if obstacle not detected (if ping sensor is not connected value is measured as 0 which allows to move the bot forward)
+  if(obstacleDistance == 0 || obstacleDistance > OBSTACLE_DETECT_DISTANCE) {
     moveForward();
     botAction = MOVE_FORWARD;
+    
+    //keep LED on
+    digitalWrite(LED_PIN, HIGH);
   } else {
-    //digitalWrite(LED_PIN, HIGH);
     rotate();
+    blinkLED(currentTime);
   }
 }
 
 void stopBot() {
-  //Serial.println("stop bot");
   leftWheel.run(RELEASE);
   rightWheel.run(RELEASE);
+}
+
+void blinkLED(unsigned long currentTime) {
+  if(currentTime - ledBlinkLastEpoch > ledBlinkDelay) {
+    if(ledBlinkState == HIGH) {
+      ledBlinkState = LOW;
+    } else {
+      ledBlinkState = HIGH;
+    }
+    
+    digitalWrite(LED_PIN, ledBlinkState);
+    ledBlinkLastEpoch = currentTime;
+  }
+}
+
+void powerOff() {
+  digitalWrite(LED_PIN, LOW);
+  stopPingSensor();
+  stopBot();
 }
 
 void setup() {
@@ -118,32 +154,31 @@ void setup() {
 }
 
 void loop() {
-  delay(100); //delay for ping sensor, min delay for ping sensor is 29ms
-  
   int pushBtnState = digitalRead(PUSH_BTN_PIN);
-  long currentTime = millis();
+  unsigned long currentTime = millis();
   
-  if(currentTime - lastTime > DEBOUNCE_DELAY) {
+  if(currentTime - pushBtnLastEpoch > DEBOUNCE_DELAY) {
     //switch on at transition from LOW -> HIGH
     if(pushBtnState == HIGH) {
       if(POWER_ON_STATE == LOW) {
         POWER_ON_STATE = HIGH;
       } else {
         POWER_ON_STATE = LOW;
-        
-        digitalWrite(LED_PIN, LOW);
-        stopPingSensor();
-        stopBot();
+        powerOff();
       }
     }
 
-    lastTime = currentTime;
+    pushBtnLastEpoch = currentTime;
   }
 
   if(POWER_ON_STATE == HIGH) {
-    digitalWrite(LED_PIN, HIGH);
-    runPingSensor();
-    runBot();
+    //check obstacles
+    if(currentTime - pingSensorLastEpoch > pingSensorDelay) {
+      runPingSensor();
+      pingSensorLastEpoch = currentTime;
+    }
+    
+    //run robot's motor
+    runBot(currentTime);
   }
 }
-
