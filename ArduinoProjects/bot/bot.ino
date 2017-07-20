@@ -29,12 +29,16 @@
 
 #define PUSH_BTN_PIN A3
 
+boolean isRemoteControlled = false;
+
 enum ACTION {
   LEFT_ROTATION,
   RIGHT_ROTATION,
   MOVE_FORWARD,
   MOVE_BACKWARD
 };
+
+ACTION botAction;
 
 unsigned int obstacleDistance;
 unsigned long pingSensorDelay = 100; //ms
@@ -48,13 +52,12 @@ unsigned long DEBOUNCE_DELAY = 200;
 unsigned long pushBtnLastEpoch = 0;
 int POWER_ON_STATE = LOW;
 
-unsigned long irReceiveDelay = 100; //ms
+unsigned long irReceiveDelay = 1000; //ms
 unsigned long irReceiveLastEpoch = 0;
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 AF_DCMotor leftWheel(DC_MOTOR_1, MOTOR34_64KHZ);
 AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
-ACTION botAction;
 
 IRrecv irrecv(IR_RECV_PIN);
 decode_results results;
@@ -158,7 +161,7 @@ void blinkLED(unsigned long currentTime) {
   }
 }
 
-void checkIRCommand() {
+void checkIRCommandForRobot() {
   if(results.value == IR_MOVE_FORWARD) {
     moveForward();
   } else if(results.value == IR_MOVE_BACKWARD) {
@@ -175,9 +178,11 @@ void checkIRReceiver(unsigned long currentTime) {
     irReceiveLastEpoch = currentTime;
 
     if(irrecv.decode(&results)) {
-      //Serial.println(results.value, HEX);
-      
+      Serial.println(results.value, HEX);
+
+      //TODO: quickly received several codes as long the the button is pressed, use single code
       if(results.value == IR_POWER) {
+        isRemoteControlled = true;
         togglePowerState();
       }
       
@@ -186,7 +191,7 @@ void checkIRReceiver(unsigned long currentTime) {
 
     if(POWER_ON_STATE == HIGH) {
       switchOnIndicator();
-      checkIRCommand();
+      checkIRCommandForRobot();
     }
   }
 }
@@ -195,6 +200,7 @@ void checkPushButtonState(unsigned long currentTime, int pushBtnState) {
   if(currentTime - pushBtnLastEpoch > DEBOUNCE_DELAY) {
     //switch on at transition from LOW -> HIGH
     if(pushBtnState == HIGH) {
+      isRemoteControlled = false;
       togglePowerState();
     }
     
@@ -239,11 +245,11 @@ void loop() {
   checkPushButtonState(currentTime, pushBtnState);
   checkIRReceiver(currentTime);
     
-  if(POWER_ON_STATE == HIGH) {
+  if(POWER_ON_STATE == HIGH && !isRemoteControlled) {
     //check obstacles
-    //runPingSensor(currentTime);
+    runPingSensor(currentTime);
     
     //run robot's motor
-    //runBot(currentTime);
+    runBot(currentTime);
   }
 }
