@@ -27,6 +27,15 @@
 #define IR_MOVE_LEFT 0xC0005A
 #define IR_MOVE_RIGHT 0xC0005B
 
+enum REMOTE_STATE {
+  REMOTE_FORWARD,
+  REMOTE_BACKWARD,
+  REMOTE_LEFT,
+  REMOTE_RIGHT
+};
+
+REMOTE_STATE remoteState;
+
 #define PUSH_BTN_PIN A3
 
 boolean isRemoteControlled = false;
@@ -135,6 +144,26 @@ void runBot(unsigned long currentTime) {
   }
 }
 
+void checkBotState(unsigned long currentTime) {
+  switch(remoteState) {
+    case REMOTE_FORWARD:
+      moveForward();
+    break;
+
+    case REMOTE_BACKWARD:
+      moveBackward();
+    break;
+
+    case REMOTE_LEFT:
+      rotateLeft();
+    break;
+
+    case REMOTE_RIGHT:
+      rotateRight();
+    break;
+  }
+}
+
 void stopBot() {
   leftWheel.run(RELEASE);
   rightWheel.run(RELEASE);
@@ -161,15 +190,15 @@ void blinkLED(unsigned long currentTime) {
   }
 }
 
-void checkIRCommandForRobot() {
+void setRemoteStateForIRCommand() {
   if(results.value == IR_MOVE_FORWARD) {
-    moveForward();
+    remoteState = REMOTE_FORWARD;
   } else if(results.value == IR_MOVE_BACKWARD) {
-    moveBackward();
+    remoteState = REMOTE_BACKWARD;
   } else if(results.value == IR_MOVE_LEFT) {
-    rotateLeft();
+    remoteState = REMOTE_LEFT;
   } else if(results.value == IR_MOVE_RIGHT) {
-    rotateRight();
+    remoteState = REMOTE_RIGHT;
   }
 }
 
@@ -178,25 +207,27 @@ void checkIRReceiver(unsigned long currentTime) {
     irReceiveLastEpoch = currentTime;
 
     if(irrecv.decode(&results)) {
-      Serial.println(results.value, HEX);
+      //Serial.println(results.value, HEX);
 
-      //TODO: quickly received several codes as long the the button is pressed, use single code
+      //power on robot
       if(results.value == IR_POWER) {
         isRemoteControlled = true;
         togglePowerState();
       }
-      
-      irrecv.resume(); // Receive the next value
-    }
 
-    if(POWER_ON_STATE == HIGH) {
-      switchOnIndicator();
-      checkIRCommandForRobot();
+      //check IR command if the robot is powered on
+      if(POWER_ON_STATE == HIGH) {
+        setRemoteStateForIRCommand();
+      }
+    
+      irrecv.resume();
     }
   }
 }
 
-void checkPushButtonState(unsigned long currentTime, int pushBtnState) {
+void checkPushButtonState(unsigned long currentTime) {
+  int pushBtnState = digitalRead(PUSH_BTN_PIN);
+  
   if(currentTime - pushBtnLastEpoch > DEBOUNCE_DELAY) {
     //switch on at transition from LOW -> HIGH
     if(pushBtnState == HIGH) {
@@ -239,17 +270,24 @@ void setup() {
 }
 
 void loop() {
-  int pushBtnState = digitalRead(PUSH_BTN_PIN);
   unsigned long currentTime = millis();
   
-  checkPushButtonState(currentTime, pushBtnState);
+  checkPushButtonState(currentTime);
   checkIRReceiver(currentTime);
     
-  if(POWER_ON_STATE == HIGH && !isRemoteControlled) {
-    //check obstacles
-    runPingSensor(currentTime);
+  if(POWER_ON_STATE == HIGH) {
+    if(!isRemoteControlled) {
+      //check obstacles
+      runPingSensor(currentTime);
     
-    //run robot's motor
-    runBot(currentTime);
+      //run robot's motor
+      runBot(currentTime);
+    } else {
+      //keep LED on
+      switchOnIndicator();
+
+      //perform robot action depens on remote controller state
+      checkBotState(currentTime);
+    }
   }
 }
