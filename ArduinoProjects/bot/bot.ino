@@ -1,6 +1,20 @@
 /******************************************************************
- Project     : Obstacle Avoidance Robot
- Libraries   : Ping sensor, Adafruit motor shield
+ Project     : Smart Robot - Robot can be controlled by remote control or push button and 
+               can be moved autonomously or manually by remote control.
+               
+               For this project I used Tata Sky remote control.
+               
+               Remote Control Button Settings:
+                Switch On/Off - Power On Button
+                Move Forward - Up Button
+                Move Backward - Down Button
+                Move Left - Left Button
+                Move Right - Right Button
+                Mode Change (Manual/Autonomous) - TV Button
+
+               In autonomous mode robot runs freely without colliding with obstacles.
+               
+ Libraries   : Ping sensor, Adafruit motor shield, IR remote
  Author      : Prasenjit Mondal
  Date        : 06/07/17
 ******************************************************************/
@@ -15,6 +29,7 @@
 #define OBSTACLE_DETECT_DISTANCE 5
 
 #define LED_PIN A2
+#define PUSH_BTN_PIN A3
 
 #define DC_MOTOR_1 4
 #define DC_MOTOR_2 3
@@ -22,6 +37,7 @@
 
 #define IR_RECV_PIN A1
 #define IR_POWER 0xC0000C
+#define IR_ROBOT_MODE_CHANGE 0xC00080
 #define IR_MOVE_FORWARD 0xC00058
 #define IR_MOVE_BACKWARD 0xC00059
 #define IR_MOVE_LEFT 0xC0005A
@@ -34,12 +50,6 @@ enum REMOTE_STATE {
   REMOTE_RIGHT
 };
 
-REMOTE_STATE remoteState;
-
-#define PUSH_BTN_PIN A3
-
-boolean isRemoteControlled = false;
-
 enum ACTION {
   LEFT_ROTATION,
   RIGHT_ROTATION,
@@ -47,7 +57,8 @@ enum ACTION {
   MOVE_BACKWARD
 };
 
-ACTION botAction;
+REMOTE_STATE remoteState = -1;
+ACTION botAction = -1;
 
 unsigned int obstacleDistance;
 unsigned long pingSensorDelay = 100; //ms
@@ -61,15 +72,16 @@ unsigned long DEBOUNCE_DELAY = 200;
 unsigned long pushBtnLastEpoch = 0;
 int POWER_ON_STATE = LOW;
 
-unsigned long irReceiveDelay = 1000; //ms
+unsigned long irReceiveDelay = 800; //ms
 unsigned long irReceiveLastEpoch = 0;
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
 AF_DCMotor leftWheel(DC_MOTOR_1, MOTOR34_64KHZ);
 AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
-
 IRrecv irrecv(IR_RECV_PIN);
+
 decode_results results;
+boolean isAutonomous = false; //robot can be set to autonomous by remote control
 
 void moveForward() {
   leftWheel.run(BACKWARD);
@@ -84,14 +96,14 @@ void moveBackward() {
 }
 
 void rotateLeft() {
-  leftWheel.run(BACKWARD);
-  rightWheel.run(FORWARD);
+  leftWheel.run(FORWARD);
+  rightWheel.run(BACKWARD);
   botAction = LEFT_ROTATION;
 }
 
 void rotateRight() {
-  leftWheel.run(FORWARD);
-  rightWheel.run(BACKWARD);
+  leftWheel.run(BACKWARD);
+  rightWheel.run(FORWARD);
   botAction = RIGHT_ROTATION;
 }
 
@@ -128,10 +140,10 @@ void runPingSensor(unsigned long currentTime) {
 }
 
 void stopPingSensor() {
- // sonar.timer_stop(); 
+ // sonar.timer_stop(); //TODO: fix compilation error enabling this
 }
 
-void runBot(unsigned long currentTime) {
+void runBotAutonomously(unsigned long currentTime) {
   //if obstacle not detected (if ping sensor is not connected value is measured as 0 which allows to move the bot forward)
   if(obstacleDistance == 0 || obstacleDistance > OBSTACLE_DETECT_DISTANCE) {
     moveForward();
@@ -144,7 +156,7 @@ void runBot(unsigned long currentTime) {
   }
 }
 
-void checkBotState(unsigned long currentTime) {
+void runBotManually(unsigned long currentTime) {
   switch(remoteState) {
     case REMOTE_FORWARD:
       moveForward();
@@ -191,14 +203,26 @@ void blinkLED(unsigned long currentTime) {
 }
 
 void setRemoteStateForIRCommand() {
-  if(results.value == IR_MOVE_FORWARD) {
-    remoteState = REMOTE_FORWARD;
-  } else if(results.value == IR_MOVE_BACKWARD) {
-    remoteState = REMOTE_BACKWARD;
-  } else if(results.value == IR_MOVE_LEFT) {
-    remoteState = REMOTE_LEFT;
-  } else if(results.value == IR_MOVE_RIGHT) {
-    remoteState = REMOTE_RIGHT;
+  switch(results.value) {
+    case IR_MOVE_FORWARD:
+      remoteState = REMOTE_FORWARD;
+    break;
+
+    case IR_MOVE_BACKWARD:
+      remoteState = REMOTE_BACKWARD;
+    break;
+
+    case IR_MOVE_LEFT:
+      remoteState = REMOTE_LEFT;
+    break;
+
+    case IR_MOVE_RIGHT:
+      remoteState = REMOTE_RIGHT;
+    break;
+
+    case IR_ROBOT_MODE_CHANGE:
+      isAutonomous = !isAutonomous;
+    break;
   }
 }
 
@@ -211,7 +235,6 @@ void checkIRReceiver(unsigned long currentTime) {
 
       //power on robot
       if(results.value == IR_POWER) {
-        isRemoteControlled = true;
         togglePowerState();
       }
 
@@ -231,7 +254,6 @@ void checkPushButtonState(unsigned long currentTime) {
   if(currentTime - pushBtnLastEpoch > DEBOUNCE_DELAY) {
     //switch on at transition from LOW -> HIGH
     if(pushBtnState == HIGH) {
-      isRemoteControlled = false;
       togglePowerState();
     }
     
@@ -252,6 +274,9 @@ void powerOff() {
   switchOffIndicator();
   stopPingSensor();
   stopBot();
+
+  remoteState = -1;
+  botAction = -1;
 }
 
 void setup() {
@@ -276,18 +301,18 @@ void loop() {
   checkIRReceiver(currentTime);
     
   if(POWER_ON_STATE == HIGH) {
-    if(!isRemoteControlled) {
+    if(isAutonomous) {
       //check obstacles
       runPingSensor(currentTime);
     
       //run robot's motor
-      runBot(currentTime);
+      runBotAutonomously(currentTime);
     } else {
       //keep LED on
       switchOnIndicator();
 
       //perform robot action depens on remote controller state
-      checkBotState(currentTime);
+      runBotManually(currentTime);
     }
   }
 }
