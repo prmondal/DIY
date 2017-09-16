@@ -26,14 +26,14 @@
 #define TRIGGER_PIN  A5  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     A4  // Arduino pin tied to echo pin on the ultrasonic sensor.
 #define MAX_DISTANCE 200 // Maximum distance we want to ping for (in centimeters). Maximum sensor distance is rated at 400-500cm.
-#define OBSTACLE_DETECT_DISTANCE 5
+#define OBSTACLE_DETECT_DISTANCE 15
 
 #define LED_PIN A2
 #define PUSH_BTN_PIN A3
 
 #define DC_MOTOR_1 4
 #define DC_MOTOR_2 3
-#define SPEED 200
+#define SPEED 150
 
 #define IR_RECV_PIN A1
 #define IR_POWER 0xC0000C
@@ -42,6 +42,8 @@
 #define IR_MOVE_BACKWARD 0xC00059
 #define IR_MOVE_LEFT 0xC0005A
 #define IR_MOVE_RIGHT 0xC0005B
+
+boolean DEBUG_MODE = false;
 
 enum REMOTE_STATE {
   REMOTE_FORWARD,
@@ -72,7 +74,7 @@ unsigned long DEBOUNCE_DELAY = 200;
 unsigned long pushBtnLastEpoch = 0;
 int POWER_ON_STATE = LOW;
 
-unsigned long irReceiveDelay = 800; //ms
+unsigned long irReceiveDelay = 500; //ms
 unsigned long irReceiveLastEpoch = 0;
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
@@ -81,7 +83,7 @@ AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
 IRrecv irrecv(IR_RECV_PIN);
 
 decode_results results;
-boolean isAutonomous = false; //robot can be set to autonomous by remote control
+boolean isAutonomous = true; //robot can be set to manual by remote control
 
 void moveForward() {
   leftWheel.run(BACKWARD);
@@ -134,13 +136,9 @@ void rotate() {
 void runPingSensor(unsigned long currentTime) {
   if(currentTime - pingSensorLastEpoch > pingSensorDelay) {
     obstacleDistance = sonar.ping_in();
-    //Serial.println(obstacleDistance);
+    if(DEBUG_MODE) Serial.println("Current obstacle distance: " + obstacleDistance);
     pingSensorLastEpoch = currentTime;
   }
-}
-
-void stopPingSensor() {
- // sonar.timer_stop(); //TODO: fix compilation error enabling this
 }
 
 void runBotAutonomously(unsigned long currentTime) {
@@ -205,22 +203,27 @@ void blinkLED(unsigned long currentTime) {
 void setRemoteStateForIRCommand() {
   switch(results.value) {
     case IR_MOVE_FORWARD:
+      if(DEBUG_MODE) Serial.println("forward");
       remoteState = REMOTE_FORWARD;
     break;
 
     case IR_MOVE_BACKWARD:
+      if(DEBUG_MODE) Serial.println("backward");
       remoteState = REMOTE_BACKWARD;
     break;
 
     case IR_MOVE_LEFT:
+      if(DEBUG_MODE) Serial.println("left");
       remoteState = REMOTE_LEFT;
     break;
 
     case IR_MOVE_RIGHT:
+      if(DEBUG_MODE) Serial.println("right");
       remoteState = REMOTE_RIGHT;
     break;
 
     case IR_ROBOT_MODE_CHANGE:
+      if(DEBUG_MODE) Serial.println("mode change");
       isAutonomous = !isAutonomous;
     break;
   }
@@ -231,7 +234,7 @@ void checkIRReceiver(unsigned long currentTime) {
     irReceiveLastEpoch = currentTime;
 
     if(irrecv.decode(&results)) {
-      //Serial.println(results.value, HEX);
+      if(DEBUG_MODE) Serial.println(results.value, HEX);
 
       //power on robot
       if(results.value == IR_POWER) {
@@ -263,8 +266,10 @@ void checkPushButtonState(unsigned long currentTime) {
 
 void togglePowerState() {
   if(POWER_ON_STATE == LOW) {
+    if(DEBUG_MODE) Serial.println("Powered On");
     POWER_ON_STATE = HIGH;
   } else {
+    if(DEBUG_MODE) Serial.println("Powered Off");
     POWER_ON_STATE = LOW;
     powerOff();
   }
@@ -272,11 +277,11 @@ void togglePowerState() {
 
 void powerOff() {
   switchOffIndicator();
-  stopPingSensor();
   stopBot();
 
   remoteState = -1;
   botAction = -1;
+  isAutonomous = true;
 }
 
 void setup() {
