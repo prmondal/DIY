@@ -19,9 +19,9 @@
  Date        : 06/07/17
 ******************************************************************/
 
-#include <NewPing.h>
-#include <AFMotor.h>
-#include <IRremote.h>
+#include "NewPing.h"
+#include "AFMotor.h"
+#include "IRremote.h"
 
 #define TRIGGER_PIN  A5  // Arduino pin tied to trigger pin on the ultrasonic sensor.
 #define ECHO_PIN     A4  // Arduino pin tied to echo pin on the ultrasonic sensor.
@@ -49,18 +49,20 @@ enum REMOTE_STATE {
   REMOTE_FORWARD,
   REMOTE_BACKWARD,
   REMOTE_LEFT,
-  REMOTE_RIGHT
+  REMOTE_RIGHT,
+  REMOTE_UNKNOWN
 };
 
 enum ACTION {
   LEFT_ROTATION,
   RIGHT_ROTATION,
   MOVE_FORWARD,
-  MOVE_BACKWARD
+  MOVE_BACKWARD,
+  NO_ACTION
 };
 
-REMOTE_STATE remoteState = -1;
-ACTION botAction = -1;
+REMOTE_STATE remoteState = REMOTE_UNKNOWN;
+ACTION botAction = NO_ACTION;
 
 unsigned int obstacleDistance;
 unsigned long pingSensorDelay = 100; //ms
@@ -78,11 +80,13 @@ unsigned long irReceiveDelay = 500; //ms
 unsigned long irReceiveLastEpoch = 0;
 
 NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and maximum distance.
+
 AF_DCMotor leftWheel(DC_MOTOR_1, MOTOR34_64KHZ);
 AF_DCMotor rightWheel(DC_MOTOR_2, MOTOR34_64KHZ);
-IRrecv irrecv(IR_RECV_PIN);
 
+IRrecv irrecv(IR_RECV_PIN);
 decode_results results;
+
 boolean isAutonomous = true; //robot can be set to manual by remote control
 
 void moveForward() {
@@ -279,8 +283,8 @@ void powerOff() {
   switchOffIndicator();
   stopBot();
 
-  remoteState = -1;
-  botAction = -1;
+  remoteState = REMOTE_UNKNOWN;
+  botAction = NO_ACTION;
   isAutonomous = true;
 }
 
