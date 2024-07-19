@@ -14,6 +14,7 @@ FLASH
 Use st-link to flash the firmware to device. For that you need to install the _st-flash_ tool. This needs to be done once.
 - Run **git clone _git@github.com:stlink-org/stlink.git**.
 - For MacOS you need to check out tag version 1.7.0. **git checkout 179650**.
+- Install **libusb** if it is not installed already. Run **brew install libusb**.
 - To fix linker error edit **CMakeLists.txt** and add the following line inside **if (APPLE)**.
 
     **find_library(SECURITY_FRAMEWORK Security)**
