@@ -185,6 +185,6 @@ erase:
 clean:
 	rm -rf $(BUILD_DIR) $(GENERATED_BINS)
 
-.PHONY: all clean flash st-flash
+.PHONY: all clean flash st-flash erase
 -include $(OBJS:.o=.d)
 
